@@ -1,0 +1,64 @@
+name: Build and deploy FreeAudioConverter
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out website repository
+        uses: actions/checkout@v4
+
+      - name: Check out converter engine
+        uses: actions/checkout@v4
+        with:
+          repository: joshuafitzmorris/decant
+          path: converter-source
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: converter-source/package-lock.json
+
+      - name: Install dependencies
+        working-directory: converter-source
+        run: npm ci
+
+      - name: Build website
+        working-directory: converter-source
+        env:
+          BASE_PATH: /FreeAudioConverter/
+          SITE_URL: https://kalanapradeep14-cloud.github.io/FreeAudioConverter/
+        run: |
+          npm run build
+          cp LICENSE dist/THIRD-PARTY-DECANT-LICENSE.txt
+
+      - name: Upload website
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: converter-source/dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
