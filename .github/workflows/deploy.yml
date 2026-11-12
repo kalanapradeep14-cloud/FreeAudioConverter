@@ -34,6 +34,115 @@ jobs:
           cache: npm
           cache-dependency-path: converter-source/package-lock.json
 
+      - name: Customize FreeAudioConverter
+        working-directory: converter-source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path(".")
+          for folder in ["src", "public"]:
+              base = root / folder
+              if base.exists():
+                  for p in base.rglob("*"):
+                      if p.is_file() and p.suffix in [".tsx", ".ts", ".html", ".json", ".txt", ".svg"]:
+                          try:
+                              s = p.read_text()
+                              p.write_text(s.replace("Decant", "FreeAudioConverter"))
+                          except UnicodeDecodeError:
+                              pass
+
+          p = root / "index.html"
+          s = p.read_text()
+          s = s.replace(
+              "FreeAudioConverter: convert files without uploading them",
+              "FreeAudioConverter - Free Online Audio and Video Converter"
+          )
+          s = s.replace(
+              "A free converter for images, audio, video, documents, ebooks and spreadsheets. It runs in your browser, so your files never leave your device.",
+              "Convert audio and video files online for free. Convert MP3, WAV, MP4 and many other formats directly in your browser."
+          )
+          s = s.replace('content="FreeAudioConverter"', 'content="FreeAudioConverter"')
+          p.write_text(s)
+
+          p = root / "vite.config.ts"
+          s = p.read_text().replace(
+              "Convert files in your browser. Nothing is uploaded.",
+              "Free online audio and video converter."
+          )
+          p.write_text(s)
+
+          footer = root / "src/app/Footer.tsx"
+          s = footer.read_text()
+          s = s.replace(
+              "Made in Vancouver by",
+              "Powered by an open-source conversion engine, originally created by"
+          )
+          s = s.replace(
+              "There’s no server to upload to, and the page’s security policy blocks connections to other sites.",
+              "Your files are processed in your browser rather than uploaded to a conversion server."
+          )
+          s = s.replace(
+              "Decant has no analytics, cookies or accounts, and doesn’t know who you are or what you convert.",
+              "FreeAudioConverter does not require an account. Read our Privacy Policy for details."
+          )
+          s = s.replace(
+              "Decant is free",
+              "FreeAudioConverter is free"
+          )
+          s = s.replace(
+              "How does it make money? It doesn’t. If it saved you some hassle, a coffee is always welcome.",
+              "This website is free to use. If it saved you some hassle, a coffee is always welcome."
+          )
+          s = s.replace(
+              "</footer>",
+              """
+                <nav style={{padding:'20px 0',display:'flex',gap:'20px',flexWrap:'wrap'}}>
+                  <a href={`${import.meta.env.BASE_URL}about/`}>About</a>
+                  <a href={`${import.meta.env.BASE_URL}privacy/`}>Privacy Policy</a>
+                  <a href={`${import.meta.env.BASE_URL}terms/`}>Terms of Use</a>
+                  <a href={`${import.meta.env.BASE_URL}contact/`}>Contact</a>
+                </nav>
+              </footer>
+              """
+          )
+          footer.write_text(s)
+
+          pages = {
+          "about": ("About FreeAudioConverter", "FreeAudioConverter is a free online file conversion website. It helps users convert audio and video files using their browser. The conversion engine is based on the open-source Decant project by Joshua Fitz-Morris."),
+          "privacy": ("Privacy Policy", "FreeAudioConverter processes selected media files in your browser and does not upload them to a FreeAudioConverter conversion server. The website is hosted by GitHub Pages, which may collect technical information such as IP address and browser details in its server logs. If advertising services such as Google AdSense are added, they may use cookies or similar technologies. This policy may be updated when the website changes."),
+          "terms": ("Terms of Use", "FreeAudioConverter is provided free of charge and without warranty. Conversion results depend on your device, browser and selected file. You are responsible for ensuring that you have the right to use and convert the files you select. Do not use this service for unlawful purposes. Some formats may not work on every device."),
+          "contact": ("Contact", "For questions, suggestions or to report a problem, please contact the website owner through the GitHub repository. Do not upload private or personal media files when reporting an issue.")
+          }
+
+          for slug, (title, body) in pages.items():
+              d = root / "public" / slug
+              d.mkdir(parents=True, exist_ok=True)
+              extra = '<p><a href="../">Back to FreeAudioConverter</a></p>'
+              if slug == "contact":
+                  extra = '<p><a href="https://github.com/kalanapradeep14-cloud/FreeAudioConverter/issues">Contact / Report an issue on GitHub</a></p><p><a href="../">Back to FreeAudioConverter</a></p>'
+              html = f"""<!doctype html>
+          <html lang="en">
+          <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>{title} - FreeAudioConverter</title>
+          <style>
+          body{{font-family:Arial,sans-serif;max-width:760px;margin:50px auto;padding:20px;line-height:1.7;color:#222}}
+          a{{color:#087b65}}
+          </style>
+          </head>
+          <body>
+          <h1>{title}</h1>
+          <p>{body}</p>
+          {extra}
+          </body>
+          </html>"""
+              (d / "index.html").write_text(html)
+
+          print("FreeAudioConverter customization complete.")
+          PY
+
       - name: Install dependencies
         working-directory: converter-source
         run: npm ci
