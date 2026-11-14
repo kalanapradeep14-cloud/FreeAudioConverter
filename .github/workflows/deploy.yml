@@ -1,4 +1,4 @@
-name: Build and deploy FreeAudioConverter
+name: Build and deploy eZ Converter
 
 on:
   push:
@@ -17,11 +17,12 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Check out website repository
+      - name: Checkout website repository
         uses: actions/checkout@v4
 
-      - name: Check out converter engine
+      - name: Checkout converter engine
         uses: actions/checkout@v4
         with:
           repository: joshuafitzmorris/decant
@@ -34,80 +35,171 @@ jobs:
           cache: npm
           cache-dependency-path: converter-source/package-lock.json
 
-      - name: Customize FreeAudioConverter
+      - name: Customize eZ Converter
         working-directory: converter-source
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
           root = Path(".")
+
+          def edit(path, old, new):
+              p = root / path
+              s = p.read_text()
+              if old not in s:
+                  raise RuntimeError(f"Expected text not found in {path}: {old[:70]}")
+              p.write_text(s.replace(old, new))
+
+          # Replace the old brand throughout the app.
           for folder in ["src", "public"]:
               base = root / folder
               if base.exists():
                   for p in base.rglob("*"):
-                      if p.is_file() and p.suffix in [".tsx", ".ts", ".html", ".json", ".txt", ".svg"]:
+                      if p.is_file() and p.suffix in [
+                          ".tsx", ".ts", ".html", ".json", ".txt", ".svg"
+                      ]:
                           try:
                               s = p.read_text()
-                              p.write_text(s.replace("Decant", "FreeAudioConverter"))
+                              p.write_text(s.replace("Decant", "eZ Converter"))
                           except UnicodeDecodeError:
                               pass
 
-          p = root / "index.html"
-          s = p.read_text()
-          s = s.replace(
+          # Main HTML metadata.
+          edit(
+              "index.html",
               "Decant: convert files without uploading them",
-              "FreeAudioConverter - Free Online Audio and Video Converter"
+              "eZ Converter - Free Online Audio, Video, Image & Document Converter"
           )
-          s = s.replace(
+
+          edit(
+              "index.html",
               "A free converter for images, audio, video, documents, ebooks and spreadsheets. It runs in your browser, so your files never leave your device.",
-              "Convert audio and video files online for free. Convert MP3, WAV, MP4 and many other formats directly in your browser."
+              "Free Online Audio, Video, Image & Document Converter. Convert files directly in your browser."
           )
-          s = s.replace('content="Decant"', 'content="FreeAudioConverter"')
-          p.write_text(s)
 
-          p = root / "vite.config.ts"
-          s = p.read_text().replace(
-              "Convert files in your browser. Nothing is uploaded.",
-              "Free online audio and video converter."
+          edit(
+              "index.html",
+              '<meta name="color-scheme" content="light dark" />',
+              '<meta name="color-scheme" content="light dark" />\n'
+              '<script>try{const t=localStorage.getItem("ez-theme");'
+              'if(t==="dark"||t==="light")document.documentElement.dataset.theme=t;}catch(e){}</script>'
           )
-          p.write_text(s)
 
-          p = root / "src/app/Header.tsx"
-          s = p.read_text()
-          s = s.replace(
-              "inline-flex h-9 items-center gap-2 rounded-full border border-rule-strong bg-surface px-3.5 font-[600]",
-              "inline-flex h-9 whitespace-nowrap items-center gap-1 rounded-full border border-rule-strong bg-surface px-2 text-[0.65rem] font-[600] sm:gap-2 sm:px-3.5 sm:text-base"
+          # PWA details.
+          edit(
+              "vite.config.ts",
+              "description: 'Convert files in your browser. Nothing is uploaded.'",
+              "description: 'Free Online Audio, Video, Image & Document Converter.'"
           )
-          p.write_text(s)
 
+          # Replace the header with eZ Converter branding and theme switch.
+          header = """import { useEffect, useState } from 'react';
+          import { Mark } from './icons';
+
+          export const REPO_URL = 'https://github.com/kalanapradeep14-cloud/FreeAudioConverter';
+          export const SUPPORT_URL = '';
+          export const AUTHOR_URL = '';
+          export const AUTHOR_GITHUB_URL = '';
+
+          const navLink = 'inline-flex h-9 items-center rounded-field px-2.5 text-ink-2 transition-colors hover:text-ink';
+
+          export function Header() {
+            const [theme, setTheme] = useState<'light' | 'dark'>(
+              document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
+            );
+
+            useEffect(() => {
+              document.documentElement.dataset.theme = theme;
+              try { localStorage.setItem('ez-theme', theme); } catch {}
+            }, [theme]);
+
+            return (
+              <header className="flex min-h-[4.5rem] items-center justify-between gap-3 py-3 sm:min-h-20">
+                <a href={import.meta.env.BASE_URL}
+                  className="flex items-center gap-2 text-xl font-extrabold tracking-tight text-ink">
+                  <Mark />
+                  eZ Converter
+                </a>
+                <nav aria-label="Site" className="flex items-center gap-1 sm:gap-2">
+                  <a href="#how" className={`${navLink} max-md:hidden`}>How it works</a>
+                  <a href="#formats" className={`${navLink} max-md:hidden`}>Formats</a>
+                  <button
+                    type="button"
+                    onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                    aria-label="Switch colour theme"
+                    className="inline-flex h-9 items-center gap-2 rounded-full border border-rule-strong bg-surface px-3 font-semibold text-ink"
+                  >
+                    {theme === 'dark' ? '☀ Light' : '☾ Dark'}
+                  </button>
+                </nav>
+              </header>
+            );
+          }
+
+          export function SupportLink() {
+            return null;
+          }
+          """
+
+          (root / "src/app/Header.tsx").write_text(header)
+
+          # Brand subtitle on the home page.
+          edit(
+              "src/app/Intro.tsx",
+              '<div className="mt-[clamp(2rem,6vh,3.5rem)] grid gap-x-8',
+              '<p className="mb-7 text-center text-sm font-semibold tracking-wide text-ink-2 sm:text-base">'
+              'Free Online Audio, Video, Image &amp; Document Converter'
+              '</p>\n'
+              '<div className="mt-[clamp(2rem,6vh,3.5rem)] grid gap-x-8'
+          )
+
+          # Brand and privacy text in the footer.
           p = root / "src/app/Footer.tsx"
           s = p.read_text()
-          s = s.replace(
-              "No ads, no tracking",
-              "Privacy and transparency"
-          )
-          s = s.replace(
-              "FreeAudioConverter has no analytics, cookies or accounts, and doesn’t know who you are or what you convert.",
-              "The converter does not require an account. This website may display advertising. Please read our Privacy Policy for details."
-          )
-          s = s.replace(
-              "There’s no server to upload to, and the page’s security policy blocks connections to other sites.",
-              "Your selected files are processed in your browser rather than uploaded to a FreeAudioConverter conversion server."
-          )
+
           s = s.replace(
               "Made in Vancouver by",
               "Powered by an open-source conversion engine, originally created by"
           )
+
           s = s.replace(
-              "FreeAudioConverter is free",
-              "FreeAudioConverter is free"
+              "No ads, no tracking",
+              "Privacy and transparency"
           )
+
+          s = s.replace(
+              "Decant reads your files, converts them with WebAssembly and your device’s own media encoders, and hands the results straight back. There’s no server to upload to, and the page’s security policy blocks connections to other sites.",
+              "Your selected files are processed in your browser using WebAssembly and your device's media encoders."
+          )
+
+          s = s.replace(
+              "Decant has no analytics, cookies or accounts, and doesn’t know who you are or what you convert.",
+              "This website may display advertising. Please read our Privacy Policy for details."
+          )
+
           s = s.replace(
               "How does it make money? It doesn’t. If it saved you some hassle, a coffee is always welcome.",
-              "This website is free to use. If it saved you some hassle, a coffee is always welcome."
+              "eZ Converter is free to use. Advertising may help support this website."
           )
+
           s = s.replace(
-              "</footer>",
+              '<SupportLink className="mt-5" />',
+              ''
+          )
+
+          s = s.replace(
+              "Joshua Fitz-Morris",
+              "the original project creator"
+          )
+
+          s = s.replace(
+              "Joshua on GitHub",
+              "Original project"
+          )
+
+          # Add navigation links.
+          s = s.replace(
+              '</footer>',
               """
                 <nav style={{padding:'20px 0',display:'flex',gap:'20px',flexWrap:'wrap'}}>
                   <a href={`${import.meta.env.BASE_URL}about/`}>About</a>
@@ -118,46 +210,118 @@ jobs:
               </footer>
               """
           )
+
           p.write_text(s)
 
-          p = root / "src/core/seo.ts"
-          s = p.read_text()
-          s = s.replace(
-              "Yes. There are no ads, no paid tier, no account and no limit on how many files you convert. The code is open source under the MIT licence.",
-              "Yes. The converter is free to use and does not require an account. This website may display advertising. The conversion engine is open source under the MIT licence."
-          )
-          s = s.replace(
-              "and there are no ads, accounts or size limits",
-              "and no account is required"
-          )
-          s = s.replace(
-              "Nothing is uploaded, and there are no ads, accounts or size limits.",
-              "Files are processed in your browser, and no account is required."
-          )
-          p.write_text(s)
+          # International colour palette and manual theme support.
+          css = root / "src/styles/index.css"
+          s = css.read_text()
 
+          s = s.replace("--paper: #f2f4f3;", "--paper: #f5f9ff;")
+          s = s.replace("--surface: #ffffff;", "--surface: #ffffff;")
+          s = s.replace("--sunk: #e8ecea;", "--sunk: #e5f0ff;")
+          s = s.replace("--ink: #0f1a17;", "--ink: #102a56;")
+          s = s.replace("--ink-2: #47544f;", "--ink-2: #456080;")
+          s = s.replace("--ink-3: #66726d;", "--ink-3: #7186a2;")
+          s = s.replace("--on-ink: #f2f4f3;", "--on-ink: #ffffff;")
+
+          s += """
+
+          /* eZ Converter manual theme colours */
+          :root[data-theme="light"] {
+            color-scheme: light;
+            --paper: #f5f9ff;
+            --surface: #ffffff;
+            --sunk: #e5f0ff;
+            --ink: #102a56;
+            --ink-2: #456080;
+            --ink-3: #7186a2;
+            --rule: rgb(16 42 86 / 0.1);
+            --rule-strong: rgb(16 42 86 / 0.2);
+            --on-ink: #ffffff;
+          }
+
+          :root[data-theme="dark"] {
+            color-scheme: dark;
+            --paper: #081426;
+            --surface: #10233d;
+            --sunk: #193657;
+            --ink: #edf6ff;
+            --ink-2: #b5cce5;
+            --ink-3: #8da9c8;
+            --rule: rgb(220 240 255 / 0.12);
+            --rule-strong: rgb(220 240 255 / 0.24);
+            --on-ink: #081426;
+          }
+
+          a {
+            transition: color 150ms ease;
+          }
+          """
+
+          css.write_text(s)
+
+          # Create website information pages.
           pages = {
-          "about": ("About FreeAudioConverter", "FreeAudioConverter is a free online file conversion website. It helps users convert audio and video files using their browser. The conversion engine is based on the open-source Decant project by Joshua Fitz-Morris."),
-          "privacy": ("Privacy Policy", "FreeAudioConverter processes selected media files in your browser and does not upload them to a FreeAudioConverter conversion server. The website is hosted by GitHub Pages, which may collect technical information such as IP address and browser details in its server logs. If advertising services such as Google AdSense are added, they may use cookies or similar technologies. This policy may be updated when the website changes."),
-          "terms": ("Terms of Use", "FreeAudioConverter is provided free of charge and without warranty. Conversion results depend on your device, browser and selected file. You are responsible for ensuring that you have the right to use and convert the files you select. Do not use this service for unlawful purposes. Some formats may not work on every device."),
-          "contact": ("Contact", "For questions, suggestions or to report a problem, please contact the website owner through the GitHub repository. Do not upload private or personal media files when reporting an issue.")
+            "about": (
+              "About eZ Converter",
+              "eZ Converter is a free online audio, video, image and document converter. "
+              "It helps users convert files directly in their browser. "
+              "The conversion engine is based on the open-source Decant project."
+            ),
+            "privacy": (
+              "Privacy Policy",
+              "Files selected for conversion are processed in your browser. "
+              "They are not uploaded to an eZ Converter conversion server. "
+              "The hosting provider may collect technical information such as IP addresses. "
+              "If advertising services such as Google AdSense are used, cookies or similar "
+              "technologies may be used to provide and measure advertisements. "
+              "This policy may be updated when the website changes."
+            ),
+            "terms": (
+              "Terms of Use",
+              "eZ Converter is provided free of charge and without warranty. "
+              "Conversion results depend on your device, browser and selected file. "
+              "You are responsible for ensuring that you have the right to use and convert "
+              "the files you select. Do not use this service for unlawful purposes."
+            ),
+            "contact": (
+              "Contact",
+              "For questions, suggestions or to report a problem, please contact us "
+              "through the website's GitHub repository."
+            )
           }
 
           for slug, (title, body) in pages.items():
               d = root / "public" / slug
               d.mkdir(parents=True, exist_ok=True)
-              extra = '<p><a href="../">Back to FreeAudioConverter</a></p>'
+
+              extra = '<p><a href="../">Back to eZ Converter</a></p>'
+
               if slug == "contact":
-                  extra = '<p><a href="https://github.com/kalanapradeep14-cloud/FreeAudioConverter/issues">Contact / Report an issue on GitHub</a></p><p><a href="../">Back to FreeAudioConverter</a></p>'
+                  extra = (
+                    '<p><a href="https://github.com/kalanapradeep14-cloud/FreeAudioConverter/issues">'
+                    'Contact / Report an issue</a></p>' + extra
+                  )
+
               html = f"""<!doctype html>
           <html lang="en">
           <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>{title} - FreeAudioConverter</title>
+          <meta name="description" content="{body}">
+          <title>{title} - eZ Converter</title>
           <style>
-          body{{font-family:Arial,sans-serif;max-width:760px;margin:50px auto;padding:20px;line-height:1.7;color:#222}}
-          a{{color:#087b65}}
+          body {{
+            font-family: Arial, sans-serif;
+            max-width: 760px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.8;
+            background: #f5f9ff;
+            color: #102a56;
+          }}
+          a {{ color: #008fc7; }}
           </style>
           </head>
           <body>
@@ -166,9 +330,10 @@ jobs:
           {extra}
           </body>
           </html>"""
+
               (d / "index.html").write_text(html)
 
-          print("FreeAudioConverter customization complete.")
+          print("eZ Converter customization complete.")
           PY
 
       - name: Install dependencies
