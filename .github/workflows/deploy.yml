@@ -105,7 +105,7 @@ jobs:
 
           export function Header() {
             const [theme, setTheme] = useState<'light' | 'dark'>(
-              document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
+              typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
             );
 
             useEffect(() => {
