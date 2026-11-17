@@ -1,4 +1,4 @@
-name: Build and deploy eZ Converter
+name: Build and deploy eZ PDF Converter
 
 on:
   push:
@@ -35,11 +35,12 @@ jobs:
           cache: npm
           cache-dependency-path: converter-source/package-lock.json
 
-      - name: Customize eZ Converter
+      - name: Customize eZ PDF Converter
         working-directory: converter-source
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           root = Path(".")
 
@@ -47,10 +48,10 @@ jobs:
               p = root / path
               s = p.read_text()
               if old not in s:
-                  raise RuntimeError(f"Expected text not found in {path}: {old[:70]}")
+                  raise RuntimeError(f"Text not found in {path}: {old[:60]}")
               p.write_text(s.replace(old, new))
 
-          # Replace the old brand throughout the app.
+          # Brand replacement
           for folder in ["src", "public"]:
               base = root / folder
               if base.exists():
@@ -60,23 +61,86 @@ jobs:
                       ]:
                           try:
                               s = p.read_text()
-                              p.write_text(s.replace("Decant", "eZ Converter"))
+                              p.write_text(s.replace("Decant", "eZ PDF Converter"))
                           except UnicodeDecodeError:
                               pass
 
-          # Main HTML metadata.
+          # PDF-only conversion routes
+          routes = root / "src/core/routes.ts"
+          s = routes.read_text()
+
+          pattern = r"const TARGETS: Partial<Record<FormatId, readonly FormatId\[\]>> = \{.*?\n\};"
+
+          replacement = """const TARGETS: Partial<Record<FormatId, readonly FormatId[]>> = {
+            heic: ['pdf'],
+            jpg: ['pdf'],
+            png: ['pdf'],
+            webp: ['pdf'],
+            avif: ['pdf'],
+            gif: ['pdf'],
+            jxl: ['pdf'],
+            tiff: ['pdf'],
+            bmp: ['pdf'],
+            svg: ['pdf'],
+
+            pdf: ['png', 'jpg', 'txt'],
+          };"""
+
+          s, count = re.subn(pattern, replacement, s, count=1, flags=re.S)
+          if count != 1:
+              raise RuntimeError("Could not safely update PDF conversion routes")
+          routes.write_text(s)
+
+          # PDF examples for the existing animation.
+          intro = root / "src/app/Intro.tsx"
+          s = intro.read_text()
+
+          pattern = r"const HOME_EXAMPLES: Example\[\] = \[.*?\n\];"
+
+          replacement = """const HOME_EXAMPLES: Example[] = [
+            ['pdf', 'png', 'image'],
+            ['pdf', 'jpg', 'image'],
+            ['jpg', 'pdf', 'document'],
+            ['png', 'pdf', 'document'],
+            ['webp', 'pdf', 'document'],
+            ['pdf', 'txt', 'document'],
+          ];"""
+
+          s, count = re.subn(pattern, replacement, s, count=1, flags=re.S)
+          if count != 1:
+              raise RuntimeError("Could not update animation examples")
+
+          s = s.replace(
+              "Convert photos, audio, video, ebooks, documents and spreadsheets in your browser.",
+              "Convert PDF files and images directly in your browser."
+          )
+
+          s = s.replace(
+              "Nothing is uploaded",
+              "Files stay on your device"
+          )
+
+          s = s.replace(
+              "Works offline",
+              "Private browser processing"
+          )
+
+          intro.write_text(s)
+
+          # Update website metadata.
           edit(
               "index.html",
               "Decant: convert files without uploading them",
-              "eZ Converter - Free Online Audio, Video, Image & Document Converter"
+              "eZ PDF Converter - Free Online PDF Converter"
           )
 
           edit(
               "index.html",
               "A free converter for images, audio, video, documents, ebooks and spreadsheets. It runs in your browser, so your files never leave your device.",
-              "Free Online Audio, Video, Image & Document Converter. Convert files directly in your browser."
+              "Free Online PDF Converter. Convert PDF to JPG, PNG and TXT, and images to PDF directly in your browser."
           )
 
+          # Browser theme support.
           edit(
               "index.html",
               '<meta name="color-scheme" content="light dark" />',
@@ -85,14 +149,14 @@ jobs:
               'if(t==="dark"||t==="light")document.documentElement.dataset.theme=t;}catch(e){}</script>'
           )
 
-          # PWA details.
+          # PWA description.
           edit(
               "vite.config.ts",
               "description: 'Convert files in your browser. Nothing is uploaded.'",
-              "description: 'Free Online Audio, Video, Image & Document Converter.'"
+              "description: 'Free Online PDF Converter. Convert PDF and images in your browser.'"
           )
 
-          # Replace the header with eZ Converter branding and theme switch.
+          # Header and theme switch.
           header = """import { useEffect, useState } from 'react';
           import { Mark } from './icons';
 
@@ -118,11 +182,11 @@ jobs:
                 <a href={import.meta.env.BASE_URL}
                   className="flex items-center gap-2 text-xl font-extrabold tracking-tight text-ink">
                   <Mark />
-                  eZ Converter
+                  eZ PDF Converter
                 </a>
                 <nav aria-label="Site" className="flex items-center gap-1 sm:gap-2">
                   <a href="#how" className={`${navLink} max-md:hidden`}>How it works</a>
-                  <a href="#formats" className={`${navLink} max-md:hidden`}>Formats</a>
+                  <a href="#formats" className={`${navLink} max-md:hidden`}>PDF Tools</a>
                   <button
                     type="button"
                     onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -143,17 +207,17 @@ jobs:
 
           (root / "src/app/Header.tsx").write_text(header)
 
-          # Brand subtitle on the home page.
+          # Subtitle.
           edit(
               "src/app/Intro.tsx",
               '<div className="mt-[clamp(2rem,6vh,3.5rem)] grid gap-x-8',
               '<p className="mb-7 text-center text-sm font-semibold tracking-wide text-ink-2 sm:text-base">'
-              'Free Online Audio, Video, Image &amp; Document Converter'
+              'Free Online PDF Converter'
               '</p>\n'
               '<div className="mt-[clamp(2rem,6vh,3.5rem)] grid gap-x-8'
           )
 
-          # Brand and privacy text in the footer.
+          # Footer text.
           p = root / "src/app/Footer.tsx"
           s = p.read_text()
 
@@ -169,7 +233,7 @@ jobs:
 
           s = s.replace(
               "Decant reads your files, converts them with WebAssembly and your device’s own media encoders, and hands the results straight back. There’s no server to upload to, and the page’s security policy blocks connections to other sites.",
-              "Your selected files are processed in your browser using WebAssembly and your device's media encoders."
+              "Your PDF and image files are processed in your browser. Files are not uploaded to an eZ PDF Converter conversion server."
           )
 
           s = s.replace(
@@ -179,12 +243,7 @@ jobs:
 
           s = s.replace(
               "How does it make money? It doesn’t. If it saved you some hassle, a coffee is always welcome.",
-              "eZ Converter is free to use. Advertising may help support this website."
-          )
-
-          s = s.replace(
-              '<SupportLink className="mt-5" />',
-              ''
+              "eZ PDF Converter is free to use. Advertising may help support this website."
           )
 
           s = s.replace(
@@ -197,7 +256,11 @@ jobs:
               "Original project"
           )
 
-          # Add navigation links.
+          s = s.replace(
+              '<SupportLink className="mt-5" />',
+              ''
+          )
+
           s = s.replace(
               '</footer>',
               """
@@ -213,12 +276,11 @@ jobs:
 
           p.write_text(s)
 
-          # International colour palette and manual theme support.
+          # International colour palette and dark/light themes.
           css = root / "src/styles/index.css"
           s = css.read_text()
 
           s = s.replace("--paper: #f2f4f3;", "--paper: #f5f9ff;")
-          s = s.replace("--surface: #ffffff;", "--surface: #ffffff;")
           s = s.replace("--sunk: #e8ecea;", "--sunk: #e5f0ff;")
           s = s.replace("--ink: #0f1a17;", "--ink: #102a56;")
           s = s.replace("--ink-2: #47544f;", "--ink-2: #456080;")
@@ -227,7 +289,6 @@ jobs:
 
           s += """
 
-          /* eZ Converter manual theme colours */
           :root[data-theme="light"] {
             color-scheme: light;
             --paper: #f5f9ff;
@@ -253,42 +314,27 @@ jobs:
             --rule-strong: rgb(220 240 255 / 0.24);
             --on-ink: #081426;
           }
-
-          a {
-            transition: color 150ms ease;
-          }
           """
 
           css.write_text(s)
 
-          # Create website information pages.
+          # Information pages.
           pages = {
             "about": (
-              "About eZ Converter",
-              "eZ Converter is a free online audio, video, image and document converter. "
-              "It helps users convert files directly in their browser. "
-              "The conversion engine is based on the open-source Decant project."
+              "About eZ PDF Converter",
+              "eZ PDF Converter is a free online PDF tool. Convert PDF pages to JPG and PNG images, extract selectable text from PDFs, and turn images into PDF documents. Processing takes place in your browser."
             ),
             "privacy": (
               "Privacy Policy",
-              "Files selected for conversion are processed in your browser. "
-              "They are not uploaded to an eZ Converter conversion server. "
-              "The hosting provider may collect technical information such as IP addresses. "
-              "If advertising services such as Google AdSense are used, cookies or similar "
-              "technologies may be used to provide and measure advertisements. "
-              "This policy may be updated when the website changes."
+              "PDF and image files selected for conversion are processed in your browser and are not uploaded to an eZ PDF Converter conversion server. Website hosting and advertising providers may collect technical information. If Google AdSense is used, cookies or similar technologies may be used to display and measure advertisements. This policy may be updated."
             ),
             "terms": (
               "Terms of Use",
-              "eZ Converter is provided free of charge and without warranty. "
-              "Conversion results depend on your device, browser and selected file. "
-              "You are responsible for ensuring that you have the right to use and convert "
-              "the files you select. Do not use this service for unlawful purposes."
+              "eZ PDF Converter is provided free of charge and without warranty. Conversion results depend on your device, browser and selected file. You are responsible for ensuring that you have the right to use and convert the files you select. Do not use this service for unlawful purposes."
             ),
             "contact": (
               "Contact",
-              "For questions, suggestions or to report a problem, please contact us "
-              "through the website's GitHub repository."
+              "For questions, suggestions or to report a problem, please contact us through the website's GitHub repository."
             )
           }
 
@@ -296,7 +342,7 @@ jobs:
               d = root / "public" / slug
               d.mkdir(parents=True, exist_ok=True)
 
-              extra = '<p><a href="../">Back to eZ Converter</a></p>'
+              extra = '<p><a href="../">Back to eZ PDF Converter</a></p>'
 
               if slug == "contact":
                   extra = (
@@ -310,7 +356,7 @@ jobs:
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <meta name="description" content="{body}">
-          <title>{title} - eZ Converter</title>
+          <title>{title} - eZ PDF Converter</title>
           <style>
           body {{
             font-family: Arial, sans-serif;
@@ -333,7 +379,7 @@ jobs:
 
               (d / "index.html").write_text(html)
 
-          print("eZ Converter customization complete.")
+          print("eZ PDF Converter customization complete.")
           PY
 
       - name: Install dependencies
